@@ -1,3 +1,9 @@
+/* 
+	header for the prototypes and macros of the table functions.
+	the current structure is an "hash table".
+*/
+
+
 #ifndef TABLE_H
 #define TABLE_H
 #include "io.h"
@@ -43,7 +49,7 @@ void freetab(table tab);
 	content - the content to save.
 	
 	return ERR_MEM if there was a problem with memory allocation.
-	otherwise, return SUCC						.*/
+	otherwise, return SUCC.						*/
 int addtotabk(table tab, string key, string content, int kind);
 
 

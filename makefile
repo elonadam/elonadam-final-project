@@ -17,7 +17,7 @@ io.o: io.c io.h error.h
 pass1.o: pass1.c table.h io.h memoryList.h error.h guides.h supfuncs.h instructs.h
 	gcc $(flags) -c pass1.c -o pass1.o
 	
-pass2.o: pass2.c io.h supfuncs.h memoryList.h guides.h error.h table.h instructs.h
+pass2.o: pass2.c pass2.h io.h supfuncs.h memoryList.h guides.h error.h table.h instructs.h
 	gcc $(flags) -c pass2.c -o pass2.o
 	
 preasm.o: preasm.c preasm.h io.h supfuncs.h table.h error.h

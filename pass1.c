@@ -10,11 +10,10 @@
 #include "instructs.h"
 
 
-int pass1(string path, table *tab, word **memhead){
-	int status = SUCC; /* flag to remember if found an error */
+int pass1(string path, table *tab, word **memhead, int status){
 	int IC = 0, DC = 0; /* the instruction counter and the data counter */
 	int i;
-	string line; /* the current line*/
+	string line; /* the current line */
 	int ln = 0; /* count lines */
 	char lc = NLN; /* the last character in the current line */
 	char plc; /* the last character of the previous line */ 
@@ -51,7 +50,8 @@ int pass1(string path, table *tab, word **memhead){
 	
 	/* scan the lines of the source file */
 	while ((plc = lc) != EOF && (line = readline(sc, &lc, NULL)) != NULL){
-		string lbl; /* string for the label of the current line */
+		string lbl; /* string for the label declaration of the current line */
+		int lbllen; /* the length of the label declaration */
 		string *args; /* the operands of the current line */
 		int lenargs; /* the number of operands */
 		int typ; /* the type of the operation (GTYP or ITYP) */
@@ -63,30 +63,47 @@ int pass1(string path, table *tab, word **memhead){
 		/* check if the line is empty */
 		if (*line == EOS){
 			free(line);
-			continue;
+			continue; /* continue to the next line */
 		}
 		
 		
 		/* check if there is a label at the start of the line */
-		if ((lbl = islbl(line)) != NULL){
+		lbl = islbl(line);
+		lbllen = sizeoffd(line);
+		
+		if (lbl != NULL){ /* check if the label name is valid */
 			offset = skipfd(line); /* skip the label */
+			
+			/* if the label name is too long, forget it and report */
+			if(LBLLENMAX < lbllen){
+				report(status = ERR_LBL_LEN, ln);
+				free(lbl);
+				lbl = NULL;
+			}
+			
+			/* check if there is only label in the line */
+			if (*offset == EOS){
+				freeall(line, lbl, NULL);
+				report(status = ERR_LINE_OLBL , ln);
+				continue; /* continue to the next line */
+			}
+		} else if (line[lbllen - 1] == COL){ /* check if the label name wasn't valid */
+			offset = skipfd(line); /* skip the label */
+			
+			report(status = ERR_LBL_DEC, ln);
 			
 			/* check if there is only label in the line */
 			if (*offset == EOS){
 				free(line);
 				report(status = ERR_LINE_OLBL , ln);
-				continue;
+				continue; /* continue to the next line */
 			}
 		}
 		
 		
 		/* split the line to its comoponents */
 		if ((typ = splitline(offset, &opr, &args, &lenargs)) != GTYP && typ != ITYP){ /* check for errors */
-			freeall(line, args, NULL);
-			
-			if (lbl != NULL){/* check if there is a label and free it */
-				free(lbl);
-			}
+			freeall(line, args, lbl, NULL);
 			
 			/* check which error occurred */
 			if(typ == ERR_MEM){
@@ -98,7 +115,7 @@ int pass1(string path, table *tab, word **memhead){
 				return ERR_MEM;
 			}else{
 				report(status = typ, ln);
-				continue;
+				continue; /* continue to the next line */
 			}
 			
 			
@@ -106,20 +123,14 @@ int pass1(string path, table *tab, word **memhead){
 		
 		
 		/* check for allocation guide (for example ".data") */
-		if (typ == GTYP && ((guide *) opr)->kind & GALL){
+		if (typ == GTYP && (((guide *) opr)->kind & GALL)){
 			guide *op = (guide *) opr; /* cast opr to (guide *) */
 			
 			/* check the number of operands */
 			if (!((op->opmin) <= lenargs && (lenargs <= (op->opmax) || (op->opmax) == GNM))){
-				freeall(line, args);
-				
-				/* check if there is a label and free it */
-				if (lbl != NULL){
-					free(lbl);
-				}
-				
+				freeall(line, args, lbl, NULL);
 				report(status = ERR_ARGS_NUM, ln);
-				continue;
+				continue; /* continue to the next line */
 			}
 			
 			/* check if there is a label declaration in the line */
@@ -131,7 +142,7 @@ int pass1(string path, table *tab, word **memhead){
 				if (getcontent(*tab, lbl) != NULL){
 					freeall(line, args, lbl, NULL);
 					report(status = ERR_LBL, ln);
-					continue;
+					continue; /* continue to the next line */
 				}
 				
 				/* convert the data counter to binary representation */
@@ -160,7 +171,7 @@ int pass1(string path, table *tab, word **memhead){
 					return ERR_MEM;
 				}
 				
-				freeall(lbl, strDC, NULL); /* free the label */
+				freeall(lbl, strDC, NULL); /* free the label and teh address */
 			}
 			
 			/* convert the data to binary format */
@@ -179,13 +190,13 @@ int pass1(string path, table *tab, word **memhead){
 					/* check if the number is not too large or small */
 					if (intop < MINDTNUM || MAXDTNUM < intop){
 						report(status = ERR_LMT_GUN, ln);
-						continue;
+						continue; /* continue to the next operand */
 					}
 					
 					/* check if the operand was valid integer (no garbage characters) */
 					if (*suf != EOS){
 						report(status = ERR_OPD, ln);
-						continue;
+						continue; /* continue to the next operand */
 					}
 					
 					/* convert to binary base */
@@ -219,9 +230,8 @@ int pass1(string path, table *tab, word **memhead){
 					
 					/* check if the first character is QUM */
 					if (*args[i] != QUM){
-						freeall(line, args, NULL);
 						report(status = ERR_OPD, ln);
-						continue; 
+						continue;  /* continue to the next line */
 					}
 					
 					/* move ptr to point to the first character of the string */
@@ -278,7 +288,6 @@ int pass1(string path, table *tab, word **memhead){
 		} else if (typ == GTYP) { /* the guide is "extern" or "entry" (because it is not an allocation guide) */
 			guide *op = (guide *)opr; /* cast opr to (guide *) */
 			
-			
 			/* check if there is a label declaration in the line */
 			if (lbl != NULL){
 				printf("Warnning in line %d: Labels before \".entry\" and \".extern\" are ignored.\n", ln);
@@ -288,7 +297,7 @@ int pass1(string path, table *tab, word **memhead){
 			/* check if the guide is entry (the entry guide will be taen care of in "pass2") */
 			if (op->kind == GENT){
 				freeall(line, args, NULL);
-				continue;
+				continue; /* continue to the next line */
 			}
 			
 			/* the guide is ".extern" */
@@ -297,36 +306,39 @@ int pass1(string path, table *tab, word **memhead){
 			if (!((op->opmin) <= lenargs && (lenargs <= (op->opmax) || (op->opmax) == GNM))){
 				freeall(line, args, NULL);
 				report(status = ERR_ARGS_NUM, ln);
-				continue;
+				continue; /* continue to the next line */
 			}
 			
 			/* convert the operands */
 			for (i = 0; i < lenargs; i++){
 				char *ptr = args[i]; /* set ptr to the first character of the current argument */
+				int allalnum = 1; /* flag to remember if all character in the operand are alpha-numeric */
 				
 				/* check the syntax of the label */
 				
 				/* check if the first character is alphabet */
 				if (!isalpha(*ptr)){
-					freeall(line, args, NULL);
 					report(status = ERR_OPD, ln);
-					continue; 
+					continue; /* continue to the next operand */
 				}
 				
 				/* check if all the characters are alpha-numeric */
 				while (*ptr != EOS){
 					if (!isalnum(*ptr++)){ /* check the current character */
-						freeall(line, args, NULL);
 						report(status = ERR_OPD, ln);
-						continue; 
+						allalnum = !allalnum; /* continue to the next operand */
+						break; /* there is no reason to check the otehr characters of the current operand */
 					}
 				}
-										
+				
+				if (!allalnum){
+					continue; /* continue to the next operand */
+				}
+				
 				/* check if the label already exists in the file */
 				if (getcontent(*tab, args[i]) != NULL){
-					freeall(line, args, NULL);
 					report(status = ERR_LBL, ln);
-					continue; 
+					continue; /* continue to the next operand */
 				}
 				
 				/* add the label to the table with GEXT type */
@@ -353,9 +365,9 @@ int pass1(string path, table *tab, word **memhead){
 			
 			/* check the number of operands */
 			if (nop != lenargs){
-				freeall(line, args, NULL);
+				freeall(line, args, lbl, NULL);
 				report(status = ERR_ARGS_NUM, ln);
-				continue;
+				continue; /* continue to the next line */
 			}
 			
 			/* check if there is a label */
@@ -366,7 +378,7 @@ int pass1(string path, table *tab, word **memhead){
 				if (getcontent(*tab, lbl) != NULL){
 					freeall(line, args, lbl, NULL);
 					report(status = ERR_LBL, ln);
-					continue;
+					continue; /* continue to the next line */
 				}
 				
 				/* convert the instruction counter to the binary representation */
@@ -431,15 +443,17 @@ int pass1(string path, table *tab, word **memhead){
 				return ERR_MEM;
 			}
 			
+			free(opword);
+			
 			memnode = temp; /* change to the new node */
-			IC++;
+			IC++; /* count the added node */
 			
 			/* check the addressing of the operands */
 			for (i = 0; i < lenargs; i++){
-				adr[i] = findadr(args[i]);
+				adr[i] = findadr(args[i]); /* check the adderssing of the curent operand */
 				if(adr[i] == ERR_OPD){ /* check if operand addresing illegal */
 					fcont = ERR_OPD;
-				} else if (adr[i] != AC3){
+				} else if (adr[i] != AC3){ /* check if the operand is not register */
 					fadr3 = adr[i];
 				}
 			}
@@ -449,7 +463,7 @@ int pass1(string path, table *tab, word **memhead){
 				/* error reported in "pass2" */
 				status = ERR_OPD;
 				freeall(line, args, NULL);
-				continue;
+				continue; /* continue to the next line */
 			}
 			
 			/* increase the instruction counter according the addressing methods */

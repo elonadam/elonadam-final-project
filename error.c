@@ -8,7 +8,7 @@ void report(int error, int line) {
 	
 	/* check if it is a fatal error (general error)*/
 	if (error == ERR_MEM || error == ERR_FOE || error == ERR_PRINT || error == ERR_FCE){
-		printf("Error: ");
+		printf("Fatal error: ");
 	} else { /* error in the code provided by the user */
 		printf("Error in line %3d: ", line);
 	}
@@ -43,11 +43,11 @@ void report(int error, int line) {
 			break;
 			
 		case ERR_LINE_EXR:
-			printf("The line is too long (%d charcters).", MAXLEN);
+			printf("The line is too long (the limit is %d charcters), referring to the line in the \"%s\" file.", MAXLEN, EAS);
 			break;
 			
 		case ERR_LINE_OLBL:
-			printf("There is only label in the line.");
+			printf("There is only label declaration in the line (no instruction or guide).");
 			break;
 			
 		case ERR_OPD:
@@ -55,7 +55,7 @@ void report(int error, int line) {
 			break;
 			
 		case ERR_OPT:
-			printf("Unknown operation (not instruction or guide).");
+			printf("Unknown operation (no instruction or guide).");
 			break;
 			
 		case ERR_ARGS_NUM:
@@ -79,7 +79,7 @@ void report(int error, int line) {
 			break;
 			
 		case ERR_FULL_MEM:
-			printf("Reached the end of the allowed memory (%d).", MEM_END);
+			printf("Reached the end of the allowed memory (the limit is: %d).", MEM_END);
 			break;
 			
 		case ERR_LMT_DAN:
@@ -87,9 +87,16 @@ void report(int error, int line) {
 			break;
 			
 		case ERR_LMT_GUN:
-			printf("Number too big or small for guide numbers");
+			printf("Number too big or small for guide numbers.");
 			break;
 			
+			
+		case ERR_LBL_DEC:
+			printf("Invalid label name in declaration.");
+			break;
+			
+		case ERR_LBL_LEN:
+			printf("Label name in label declaration is too long (the limit is: %d)", LBLLENMAX);
 
 	}
 	

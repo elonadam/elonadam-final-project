@@ -1,13 +1,15 @@
+/* arrays for the keywords and base 32 */
+
 #include "guides.h"
 #include "instructs.h"
 #include "io.h"
 
 /* array of the guides (guide is defined in guides.h) */
 guide guids[] =	{
-					{"data"		,	1	,	GNM	,	GALL		,	INTTYP	,	{GNDEF	,	GNDEF}	},
-					{"entry"	,	1	,	1	,	GENT		,	LBLTYP	,	{GNDEF	,	GNDEF}	},
-					{"extern"	,	1	,	1	,	GEXT		,	LBLTYP	,	{GNDEF	,	GNDEF}	},
-					{"string"	,	1	,	1	,	GALL		,	STRTYP	,	{GNDEF	,	GNDEF}	},
+					{"data"		,	1	,	GNM	,	GALL		,	INTTYP	,	{GNDEF	,	GNDEF }	},
+					{"entry"	,	1	,	1	,	GENT		,	LBLTYP	,	{GNDEF	,	GNDEF }	},
+					{"extern"	,	1	,	1	,	GEXT		,	LBLTYP	,	{GNDEF	,	GNDEF }	},
+					{"string"	,	1	,	1	,	GALL		,	STRTYP	,	{GNDEF	,	GNDEF }	},
 					{"struct"	,	2	,	2	,	GALL+GSTC	,	GNDEF	,	{INTTYP	,	STRTYP}	},
 				};
 
@@ -33,7 +35,7 @@ instruct insts[] =	{
 					};
 
 
-/* array of the registers' names */
+/* array of the registers' names (string is defiend in "io.h") */
 string regs[] = {"r0","r1","r2","r3","r4","r5","r6","r7"};
 
 /* the charaters for the 32 base */

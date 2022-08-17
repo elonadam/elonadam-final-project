@@ -15,8 +15,8 @@ string addstr(string str1, string str2){
 	string nstr; /* the new string */
 	string fstr1 = (str1 == NULL ? ESTR : str1); /* if the string is NULL, replace it with ESTR */
 	
-	/* allocate spave for the new string */
-	nstr = (string)malloc((strlen(fstr1) + strlen(str2) + 1) * sizeof(char));
+	/* allocate space for the new string */
+	nstr = (string)malloc(  (strlen(fstr1) + strlen(str2) + 1) * sizeof(char)  );
 	
 	/* check the allocation */
 	if (nstr != NULL){
@@ -111,7 +111,7 @@ string islbl(string line){
 	}
 	
 	/* check that the last character in the field is COL */
-	if (line[i] != COL){
+	if (line[i] != COL || (line[i+1] != BLK && line[i + 1] != EOS)){
 		return NULL;
 	}
 	
@@ -121,16 +121,19 @@ string islbl(string line){
 	
 	/* chek if the label is a name of guide */
 	if (findguide(line) != NULL){
+		line[i] = lc; /* put the character back */
 		return NULL;
 	}
 	
 	/* chek if the label is a name of instruction */
 	if (findinst(line) != NULL){
+		line[i] = lc; /* put the character back */
 		return NULL;
 	}
 	
 	/* chek if the label is a name of register */
 	if (isreg(line) != NULL){
+		line[i] = lc; /* put the character back */
 		return NULL;
 	}
 	
@@ -253,8 +256,6 @@ string duplstr(string str){
 	/* copy-paste all the characters of the string */
 	while ((*ptr++ = *str++) != EOS);
 	
-	*ptr = EOS; /* sign the end of the string */
-	
 	return nstr;
 }
 
@@ -264,7 +265,7 @@ string skipfd(string str){
 	while (*str != EOS && *str != BLK) str++;
 	
 	/* check if there is another field */
-	return *str == BLK ? str + 1 : str;
+	return *str == BLK ? str + 1 : str; /* if *str is BLK, return pointer to the first character of the second field, otherwise it is pointer to EOS */
 }
 
 
@@ -549,8 +550,9 @@ int fcloseall(FILE *ptr, ...){
 	return status == EOF ? ERR_FCE : SUCC;
 }
 
+
 int powr(int x, int y){
-	int ans = 1; /* the ressault */
+	int ans = 1; /* the resault */
 	while (y-- != 0) ans *= x; /* mutiply the "ans" by x, y times */
 	return ans;
 }

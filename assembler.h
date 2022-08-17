@@ -1,3 +1,9 @@
+/*
+	header for the prototypes of the pre-assembler, pass1 and pass2 functions.
+	which are responsiable for compiling an EAS file to EAM,EOB,ENT and EXT files.
+*/
+
+
 #include "memoryList.h"
 #include "io.h"
 #include "table.h"
@@ -39,8 +45,8 @@ int pre(char *path);
 		and the checks that "splitline" from "supfuncs.h" perform.
 	
 	and return the code of the error in case of error, return
-	SUCC otherwise.																*/
-int pass1(string path, table *tab, word **memhead);
+	SUCC otherwise (the status parameter is there to change the default from SUCC).		*/
+int pass1(string path, table *tab, word **memhead, int status);
 
 
 
@@ -67,6 +73,8 @@ int pass1(string path, table *tab, word **memhead);
 		ERR_ENT_LBL
 		ERR_LMT_DAN
 		and the checks that "splitline" from "supfuncs.h" perform.
+	
+	if status is not SUCC or found an error the ENT, EXT and EOB files will be empty
 	
 	and return the code of the error in case of error, return
 	SUCC otherwise.																*/

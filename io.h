@@ -1,3 +1,8 @@
+/*
+	macros and functions to read\write from\to the input\output files.
+	also, definition of a string and constants for special characters.
+*/
+
 #ifndef IO_H
 #define IO_H
 

@@ -1,3 +1,7 @@
+/*
+	definition of an instruction, and macros related to instructions.
+*/
+
 #ifndef INSTRUCT
 #define INSTRUCT
 

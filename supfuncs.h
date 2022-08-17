@@ -1,3 +1,8 @@
+/*
+	macros and function to help the other functions do their tasks.
+*/
+
+
 #ifndef _sup
 #define _sup
 
@@ -17,8 +22,8 @@
 /* swap between values of two given integers */
 #define swap(x,y) {int temp = x; x = y; y = temp;}
 
-/* get a string of "WORDSIZE" length and move all the characters two characters to the left (the two characters on the left are discarded) */
-#define movel2(str) {int i; for (i = 2; i < WORDSIZE; i++) str[i - 2] = str[i];}
+/* get a string of "WORDSIZE" length and move all the characters to the left to make place for the ARE bits (the characters from position 0 to ARELEN-1 are discarded) */
+#define movel2(str) {int i; for (i = ARELEN; i < WORDSIZE; i++) str[i - ARELEN] = str[i];}
 
 /* get a number and the bit that should be accessed, assume the bit is non-negative and that the bit is smaller then the number of bits in the type of num */
 #define getbit(num, bit) (((num) & powr(BINARYBASE, (bit))) ? 1 : 0)
@@ -26,6 +31,7 @@
 /* return the bit in position "bit" of the word (from right to left) */
 #define gbw(str, bit) ((str)[(WORDSIZE - 1) - (bit)])
 
+#define LBLLENMAX 30 /* the max amount of chars label's name can have */
 
 #define ONEARGS 1 /* only one argument in the current line */
 #define TWOARGS 2 /* two argument in the current line */
@@ -49,7 +55,7 @@ string convert32(string inputNum);
 
 
 /*	return x to the power of y.
-	assume x and y are non-negative integers.	*/
+	if y is non-positive, return 1.	*/
 int powr(int x, int y);
 
 

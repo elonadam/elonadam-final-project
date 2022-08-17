@@ -15,6 +15,7 @@ int pre(char *path){
 	char lc = NLN; /* the last character in the line */
 	char plc; /* the last character of the previous line */
 	table tab; /* the macro table */
+	int status = SUCC; /* flag to remember if found error */
 	
 	/* adds the extension of the input file */
 	if ((fn = addstr(path, EAS)) == NULL){
@@ -68,15 +69,14 @@ int pre(char *path){
 		/* check if the line is too long (more than MAXLEN) */
 		if (MAXLEN < len){
 			free(line);
-			report(ERR_LINE_EXR, ln);
+			report(status = ERR_LINE_EXR, ln);
 			continue;
 		}
 		
 		/* check if it is not a macro declaration */
 		if ((name = ismacrodec(tab, line)) == NULL){
-			/*	check if there is only one field = could be an existing macro's name
-				check if the function found a matching macro 							*/
-			if (numoffds(line) == 1 && (content = getcontent(tab, line)) != NULL){ 
+			/* check if there is a macro with the content of the line as its name */
+			if ((content = getcontent(tab, line)) != NULL){ 
 				if(writeline(tg, content) == ERR_PRINT){ /* couldn't print to the file */
 					fcloseall(sc, tg, NULL);
 					freetab(tab);
@@ -105,15 +105,21 @@ int pre(char *path){
 			if (macroline == NULL){
 				fcloseall(sc, tg, NULL);
 				freetab(tab);
-				free(line);
+				freeall(line, content, NULL);
 				report(ERR_MEM, ln);
 				return ERR_MEM;
 			}
 			
+			/* check if the line is a comment */
+			if (*macroline == SCO){
+				free(macroline);
+				continue;
+			}
 			
+			/* check if the line is too long (more than MAXLEN) */
 			if (MAXLEN < len){
 				free(macroline);
-				report(ERR_LINE_EXR, ln);
+				report(status = ERR_LINE_EXR, ln);
 				continue;
 			}
 			
@@ -122,7 +128,6 @@ int pre(char *path){
 			if (!strcmp(macroline, EMAC)){ /* strcmp return 0 only when the strings are equal */
 				free(macroline);
 				endflag = !endflag; /* found endmacro */
-				
 			} else {
 				/* "addfree" is a macro from "supfuncs.h" */
 				/* adds the new line to the macro's content */
@@ -145,7 +150,7 @@ int pre(char *path){
 			return ERR_MEM;
 		}
 		
-		free(line);
+		freeall(line, content, NULL);
 	}
 	
 	freetab(tab);
@@ -155,5 +160,5 @@ int pre(char *path){
 		return ERR_FCE;
 	}
 	
-	return SUCC;
+	return status;
 }

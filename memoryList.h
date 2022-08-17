@@ -1,14 +1,25 @@
+/*	header for memory list
+	this file as, definition of linked-list's node of two kinds:
+		word - represent a memory word of the computer.
+		lblword - lists for the extern and entry labels to print.
+	
+	also, there are macros and functions to easily manipulate the lists's strings
+*/
+
 #ifndef _MEM_LIST
 #define _MEM_LIST
 
-/*header for memory list*/
 #include "supfuncs.h"
 
 
+/* memory constants */
 #define WORDSIZE	10	/* the length of memory word */
 #define MEM_STRT	100	/* memory starting location */
 #define MEM_END		255	/* memory end loacation */
 
+/* the structure of the words */
+#define ARELEN	2	/* the length of the ARE bits */
+#define ARESTRT	0	/* the start position of the ARE bits*/
 #define ADRLEN	8	/* the length of address */
 #define ADRSTRT	2	/* teh position of the last significant bit of the address */
 #define OPCLEN	4	/* the number of bits in the operation code part */
@@ -23,9 +34,12 @@
 #define EXTADR "0000000001" /* the address given to external labels */
 
 /* to set the ARE bits of a string representing a memory word */
-#define opcA(str) {gbw(str, 1) = '0'; gbw(str, 0) = '0';}
-#define opcE(str) {gbw(str, 1) = '0'; gbw(str, 0) = '1';}
-#define opcR(str) {gbw(str, 1) = '1'; gbw(str, 0) = '0';}
+#define __A 0 /* the memory word is absoulte */
+#define __E 1 /* the memory word is external */
+#define __R 2 /* the memory word is relocatable */
+#define opcA(str) {int _i; for (_i = 0; _i < ARELEN; _i++) {gbw(str, _i + ARESTRT) = '0' + getbit(__A, _i);}} /* change the ARE bits of the memory word string to A */
+#define opcE(str) {int _i; for (_i = 0; _i < ARELEN; _i++) {gbw(str, _i + ARESTRT) = '0' + getbit(__E, _i);}} /* change the ARE bits of the memory word string to E */
+#define opcR(str) {int _i; for (_i = 0; _i < ARELEN; _i++) {gbw(str, _i + ARESTRT) = '0' + getbit(__R, _i);}} /* change the ARE bits of the memory word string to R */
 
 
 /* define list of memory words */

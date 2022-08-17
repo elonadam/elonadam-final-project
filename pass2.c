@@ -8,6 +8,7 @@
 #include "error.h"
 #include "table.h"
 #include "instructs.h"
+#include "pass2.h"
 
 
 int pass2(char *path, int status, table tab, word *head){
@@ -66,6 +67,7 @@ int pass2(char *path, int status, table tab, word *head){
 		string *args; /* the operands of the current line */
 		int lenargs; /* number of operands */
 		string lbl; /* string for the label of the current line */
+		int lbllen; /* the length of the label declaration */
 		int adrtg = ACN; /* the addressing method of the target operand */
 		int adrsc = ACN; /* the addressing methos of the source operand */
 		instruct *ip; /* instruct pointer */
@@ -79,21 +81,45 @@ int pass2(char *path, int status, table tab, word *head){
 			continue;
 		}
 		
-		/* if its label skip it and move to the rest of line */
-		if ((lbl = islbl(line)) != NULL){ 
-			free(lbl);
+		
+		/* check if there is a label at the start of the line */
+		lbl = islbl(line);
+		lbllen = sizeoffd(line);
+		
+		if (lbl != NULL){ /* check if the label name is valid */
+			offset = skipfd(line); /* skip the label */
 			
-			/* skip the label */
-			offset = skipfd(line);
+			/* if the label name is too long, forget it and report */
+			if(LBLLENMAX < lbllen){
+				/* reported in pass1 */
+				status = ERR_LBL_LEN;
+				free(lbl);
+				lbl = NULL;
+			}
 			
-			/*check if there is only label in the line*/
-			if (*offset == EOS){ 
-				free(line);
-				/* this error is reported in "pass1" */
+			/* check if there is only label in the line */
+			if (*offset == EOS){
+				freeall(line, lbl, NULL);
+				/* reported in pass1 */
 				status = ERR_LINE_OLBL;
-				continue; /* move to the next line */
-			} 
+				continue; /* continue to the next line */
+			}
+			
+		} else if (line[lbllen - 1] == COL){ /* check if the label name wasn't valid */
+			offset = skipfd(line); /* skip the label */
+			
+			/* reported in pass1 */
+			status = ERR_LINE_OLBL;
+			
+			/* check if there is only label in the line */
+			if (*offset == EOS){
+				free(line);
+				/* reported in pass1 */
+				status = ERR_LINE_OLBL;
+				continue; /* continue to the next line */
+			}
 		}
+		
 		
 		/* split the line to several strings for further analyze */
 		if((res = splitline(offset, (void**)(&ip), &args, &lenargs)) != GTYP && res != ITYP) {/* if res is not GTYP or ITYP there was an error */
@@ -138,7 +164,7 @@ int pass2(char *path, int status, table tab, word *head){
 				string lblw; /* the label's word */
 				int j;
 				
-				/* check if the label exists and the that the kind is not GEXT (extern)*/
+				/* check if the label exists and the kind is not GEXT (extern)*/
 				if((kind = getkind(tab, args[i])) == NOTFOUND){ /* if the label exists */
 					report(status = ERR_ARGS_LBL, ln);
 					continue; /* move to the next operand */
@@ -151,8 +177,9 @@ int pass2(char *path, int status, table tab, word *head){
 				lblw = getcontent(tab, args[i]);
 				
 				/* get the label's address */
+				
 				for (j = 0; j < ADRSTRT; j++){
-					gbw(address, (WORDSIZE - 1) - j) = '0'; /* set to zero the extra chracters */
+					address[j] = '0'; /* set to zero the unused chaacters */
 				}
 				for (j = 0; j < ADRLEN; j++){
 					gbw(address, j) = gbw(lblw, j + ADRSTRT); /* shift the bits of the address to the right */
@@ -200,11 +227,13 @@ int pass2(char *path, int status, table tab, word *head){
 		}
 		
 		/* write the addressing method in the operation word */
-		for(i = 0; i < ADSLEN; i++) { 
-			gbw(wordnode->data, i + ADSTGST) = getbit((adrtg == ACN ? AC0 : adrtg), i) + '0'; /* write the addressing method of the target */
-			gbw(wordnode->data, i + ADSSCST) = getbit((adrsc == ACN ? AC0 : adrsc), i) + '0'; /* write the addressing method of the source */
+		if (wordnode != NULL){ /* make sure it is on the operation word (it could be NULL if there was a previous error) */
+			for(i = 0; i < ADSLEN; i++) { 
+				gbw(wordnode->data, i + ADSTGST) = getbit((adrtg == ACN ? AC0 : adrtg), i) + '0'; /* write the addressing method of the target */
+				gbw(wordnode->data, i + ADSSCST) = getbit((adrsc == ACN ? AC0 : adrsc), i) + '0'; /* write the addressing method of the source */
+			}
 		}
-		
+			
 		/* check if the addressing method match the instruction (if there is no operand the check does nothing) */
 		if ((adrtg != ACN && (ip->optg & powr(BINARYBASE, adrtg)) != powr(BINARYBASE, adrtg)) 
 		 || (adrsc != ACN && (ip->opsc & powr(BINARYBASE, adrsc)) != powr(BINARYBASE, adrsc))) {
@@ -218,8 +247,8 @@ int pass2(char *path, int status, table tab, word *head){
 		/* check if both operands are register (if there is less then two operands, at least one of them will be ACN) */
 		if (adrtg == AC3 && adrsc == AC3){
 			char memword[WORDSIZE + 1]; /* the registers' string word */
-			int srcreg = atoi(args[0] + 1); /* the number of the source register (the first character of the register is 'r') */
-			int trgtreg = atoi(args[1] + 1); /* the number of the target register (the first character of the register is 'r') */
+			int srcreg = atoi(fstArg + 1); /* the number of the source register (the first character of the register is 'r') */
+			int trgtreg = atoi(secArg + 1); /* the number of the target register (the first character of the register is 'r') */
 			word *tmp; /* temporery word to check ERR_MEM */
 			
 			memword[WORDSIZE] = EOS; /* sign the end of the string */
@@ -233,18 +262,20 @@ int pass2(char *path, int status, table tab, word *head){
 			opcA(memword); /* set the ARE of the word */
 			
 			/* add the word to the memory list */
-			if ((tmp = addnext(wordnode, memword)) == NULL){
-				freeall(line, args, NULL);
-				freeLblList(enthead);
-				freeLblList(exthead);
-				freeMemList(head);
-				freetab(tab);
-				fclose(src);
-				report(ERR_MEM, ln);
-				return ERR_MEM;
+			if (wordnode != NULL){ /* make sure it is on the operation word (it could be NULL if there was a previous error) */
+				if ((tmp = addnext(wordnode, memword)) == NULL){
+					freeall(line, args, NULL);
+					freeLblList(enthead);
+					freeLblList(exthead);
+					freeMemList(head);
+					freetab(tab);
+					fclose(src);
+					report(ERR_MEM, ln);
+					return ERR_MEM;
+				}
+				wordnode = tmp; /* move to the new node */
+				ic++; /* count the new word */
 			}
-			wordnode = tmp; /* move to the new node */
-			ic++; /* count the new word */
 		} else { /* all other cases that aren't 2 registers as arguments*/
 			int op; /* numeric operands (after cast to int) */
 			int kind; /* the kind of label operand */
@@ -256,7 +287,7 @@ int pass2(char *path, int status, table tab, word *head){
 			/* check the adressing method of the first operand */ 
 			switch(lenargs == TWOARGS ? adrsc : adrtg){ /* if there is one operand it is the target, if there are two it is the source */
 				case AC0: /* the operand is a number */
-					op = atoi(args[0]+1); /* cast the number of the operand (the first character is HSH)*/
+					op = atoi(fstArg + 1); /* cast the number of the operand (the first character is HSH)*/
 					
 					/* check if the number is too big or small */
 					if (op < MINOPNUM || MAXOPNUM < op){
@@ -281,30 +312,34 @@ int pass2(char *path, int status, table tab, word *head){
 					opcA(cop); /* set the ARE */
 					
 					/* add the operand to the list */
-					if((tmp = addnext(wordnode, cop)) == NULL){
-						freeall(line, args, cop, NULL);
-						freeLblList(enthead);
-						freeLblList(exthead);
-						freeMemList(head);
-						freetab(tab);
-						fclose(src);
-						report(ERR_MEM, ln);
-						return ERR_MEM;
+					if (wordnode != NULL){ /* make sure it is on the operation word (it could be NULL if there was a previous error) */
+						if((tmp = addnext(wordnode, cop)) == NULL){
+							freeall(line, args, cop, NULL);
+							freeLblList(enthead);
+							freeLblList(exthead);
+							freeMemList(head);
+							freetab(tab);
+							fclose(src);
+							report(ERR_MEM, ln);
+							return ERR_MEM;
+						}
+						wordnode = tmp; /* change to the new node */
+						ic++; /* count the added operand word */
 					}
-					wordnode = tmp; /* change to the new node */
-					ic++; /* count the added operand word */
+					
+					free(cop);
 					
 					break;
 					
 				case AC1: /* the operand is a label */
 					/* check if label (operand) exists in table */
-					if((kind = getkind(tab, args[0])) == NOTFOUND){ 
+					if((kind = getkind(tab, fstArg)) == NOTFOUND){ 
 						freeall(line, args, NULL);
 						report(status = ERR_ARGS_LBL, ln);
 						continue; /* move to the next line */
 					}
 					
-					cop = getcontent(tab, args[0]); /* get content of the label */
+					cop = getcontent(tab, fstArg); /* get content of the label */
 					
 					/* check if the label is external */
 					if(kind == GEXT){
@@ -325,7 +360,7 @@ int pass2(char *path, int status, table tab, word *head){
 						}
 						
 						/* add the label and position to the reference list */
-						if(addnextlbl(exthead, args[0], strIC) == NULL){
+						if(addnextlbl(exthead, fstArg, strIC) == NULL){
 							freeall(line, args, strIC, NULL);
 							freeLblList(enthead);
 							freeLblList(exthead);
@@ -342,28 +377,30 @@ int pass2(char *path, int status, table tab, word *head){
 					}
 					
 					/* add the operand to the list */
-					if((tmp = addnext(wordnode, cop)) == NULL){ /* check if added to list */
-						freeall(line, args, NULL);
-						freeLblList(enthead);
-						freeLblList(exthead);
-						freeMemList(head);
-						freetab(tab);
-						fclose(src);
-						report(ERR_MEM, ln);
-						return ERR_MEM;
+					if (wordnode != NULL) { /* make sure it is on the operation word (it could be NULL if there was a previous error) */
+						if((tmp = addnext(wordnode, cop)) == NULL){ /* check if added to list */
+							freeall(line, args, NULL);
+							freeLblList(enthead);
+							freeLblList(exthead);
+							freeMemList(head);
+							freetab(tab);
+							fclose(src);
+							report(ERR_MEM, ln);
+							return ERR_MEM;
+						}
+						wordnode = tmp; /* change to the new node */
+						ic++; /* count the added operand word */
 					}
-					wordnode = tmp; /* change to the new node */
-					ic++; /* count the added operand word */
 					
 					break;
 					
 				case AC2: /* the operand is struct field (should add the address of the label and the number of the field to the list) */
-					ptr = strchr(args[0], DOT); /* return pointer the the first encounter with dot */
+					ptr = strchr(fstArg, DOT); /* return pointer the the first encounter with dot */
 					*ptr = EOS; /* replace with end of string sign */
 					ptr++; /* move forward by one (to the field's number) */
 					
 					/* get the kinf of label (if exists) */
-					if((kind = getkind(tab, args[0])) == NOTFOUND){
+					if((kind = getkind(tab, fstArg)) == NOTFOUND){
 						freeall(line, args, NULL);
 						report(status = ERR_ARGS_LBL, ln);
 						continue; /* move to the next line */
@@ -376,7 +413,7 @@ int pass2(char *path, int status, table tab, word *head){
 						continue; /* move to the next line */
 					}
 					
-					cop = getcontent(tab, args[0]); /* get the labels address */
+					cop = getcontent(tab, fstArg); /* get the labels address */
 					
 					/* check if the label is external */
 					if(kind == GEXT){
@@ -397,7 +434,7 @@ int pass2(char *path, int status, table tab, word *head){
 						}
 						
 						/* add the label and position to the reference list */
-						if (addnextlbl(exthead, args[0], strIC) == NULL){ /* check if added to the list */
+						if (addnextlbl(exthead, fstArg, strIC) == NULL){ /* check if added to the list */
 							freeall(line, args, strIC, NULL);
 							freeLblList(enthead);
 							freeLblList(exthead);
@@ -413,21 +450,22 @@ int pass2(char *path, int status, table tab, word *head){
 						opcR(cop); /* set the ARE */
 					}
 					
-					/* added label to the list */
-					if ((tmp = addnext(wordnode, cop)) == NULL){ /* check if added to the list */
-						freeall(line, args, NULL);
-						freeLblList(enthead);
-						freeLblList(exthead);
-						freeMemList(head);
-						freetab(tab);
-						fclose(src);
-						report(ERR_MEM, ln);
-						return ERR_MEM;
+					/* add label to the list */
+					if (wordnode != NULL){ /* make sure it is on the operation word (it could be NULL if there was a previous error) */
+						if ((tmp = addnext(wordnode, cop)) == NULL){ /* check if added to the list */
+							freeall(line, args, NULL);
+							freeLblList(enthead);
+							freeLblList(exthead);
+							freeMemList(head);
+							freetab(tab);
+							fclose(src);
+							report(ERR_MEM, ln);
+							return ERR_MEM;
+						}
+
+						wordnode = tmp; /* change to the next node */
+						ic++; /* count the added node */
 					}
-					
-					wordnode = tmp; /* change to the next node */
-					ic++; /* count the added node */
-					
 					
 					/* convert to string the field's number */
 					if ((cop = itostr(atoi(ptr))) == NULL){
@@ -445,19 +483,21 @@ int pass2(char *path, int status, table tab, word *head){
 					opcA(cop); /* set teh ARE */
 					
 					/* add the field's number to the list */
-					if ((tmp = addnext(wordnode, cop)) == NULL){
-						freeall(line, args, cop, NULL);
-						freeLblList(enthead);
-						freeLblList(exthead);
-						freeMemList(head);
-						freetab(tab);
-						fclose(src);
-						report(ERR_MEM, ln);
-						return ERR_MEM;
+					if (wordnode != NULL){ /* make sure it is on the operation word (it could be NULL if there was a previous error) */
+						if ((tmp = addnext(wordnode, cop)) == NULL){
+							freeall(line, args, cop, NULL);
+							freeLblList(enthead);
+							freeLblList(exthead);
+							freeMemList(head);
+							freetab(tab);
+							fclose(src);
+							report(ERR_MEM, ln);
+							return ERR_MEM;
+						}
+
+						wordnode = tmp; /* move to the new node */
+						ic++; /* count the added node */
 					}
-					
-					wordnode = tmp; /* move to the new node */
-					ic++; /* count the added node */
 					
 					free(cop);
 					
@@ -465,7 +505,7 @@ int pass2(char *path, int status, table tab, word *head){
 					
 				case AC3: /* the operand is a register */
 					cop = (string)malloc((WORDSIZE + 1) * sizeof(char)); /* allocate new memory for the operand */
-					reg = atoi(args[0] + 1); /* get the register's number */
+					reg = atoi(fstArg + 1); /* get the register's number */
 					
 					/* check the memory allocate */
 					if (cop == NULL){ 
@@ -492,18 +532,20 @@ int pass2(char *path, int status, table tab, word *head){
 					opcA(cop); /* set the ARE of the operand's word */
 					
 					/* add the word to the list */
-					if ((tmp = addnext(wordnode, cop)) == NULL){
-						freeall(line, args, cop, NULL);
-						freeLblList(enthead);
-						freeLblList(exthead);
-						freeMemList(head);
-						freetab(tab);
-						fclose(src);
-						report(ERR_MEM, ln);
-						return ERR_MEM;
+					if (wordnode != NULL){ /* make sure it is on the operation word (it could be NULL if there was a previous error) */
+						if ((tmp = addnext(wordnode, cop)) == NULL){
+							freeall(line, args, cop, NULL);
+							freeLblList(enthead);
+							freeLblList(exthead);
+							freeMemList(head);
+							freetab(tab);
+							fclose(src);
+							report(ERR_MEM, ln);
+							return ERR_MEM;
+						}
+						wordnode = tmp; /* change to the new node */
+						ic++; /* count the new node */
 					}
-					wordnode = tmp; /* change to the new node */
-					ic++; /* count the new node */
 					
 					free(cop);
 					
@@ -514,7 +556,7 @@ int pass2(char *path, int status, table tab, word *head){
 			/* check the adressing method of the second operand */ 
 			switch(lenargs == TWOARGS ? adrtg : ACN){ /* if there are two arguments it is the target, otherwise check no one */
 				case AC0: /* the operand is a number */
-					op = atoi(args[1] + 1); /* cast the number of the operand (the first character is HSH) */
+					op = atoi(secArg + 1); /* cast the number of the operand (the first character is HSH) */
 					
 					/* check if the number is too big or small */
 					if (op < MINOPNUM || MAXOPNUM < op){
@@ -539,30 +581,35 @@ int pass2(char *path, int status, table tab, word *head){
 					opcA(cop); /* set the ARE */
 					
 					/* add the operand to the list */
-					if((tmp = addnext(wordnode, cop)) == NULL){
-						freeall(line, args, cop, NULL);
-						freeLblList(enthead);
-						freeLblList(exthead);
-						freeMemList(head);
-						freetab(tab);
-						fclose(src);
-						report(ERR_MEM, ln);
-						return ERR_MEM;
+					if (wordnode != NULL){ /* make sure it is on the operand word (it could be NULL if there was a previous error) */
+						if((tmp = addnext(wordnode, cop)) == NULL){
+							freeall(line, args, cop, NULL);
+							freeLblList(enthead);
+							freeLblList(exthead);
+							freeMemList(head);
+							freetab(tab);
+							fclose(src);
+							report(ERR_MEM, ln);
+							return ERR_MEM;
+						}
+
+						wordnode = tmp; /* change to the new node */
+						ic++; /* count the added operand word */
 					}
-					wordnode = tmp; /* change to the new node */
-					ic++; /* count the added operand word */
+					
+					free(cop);
 					
 					break;
 					
 				case AC1: /* the operand is a label */
 					/* check if label (operand) exists in table */
-					if((kind = getkind(tab, args[1])) == NOTFOUND){ 
+					if((kind = getkind(tab, secArg)) == NOTFOUND){ 
 						freeall(line, args, NULL);
 						report(status = ERR_ARGS_LBL, ln);
 						continue; /* move to the next line */
 					}
 					
-					cop = getcontent(tab, args[1]); /* get content of the label */
+					cop = getcontent(tab, secArg); /* get content of the label */
 					
 					/* check if the label is external */
 					if(kind == GEXT){
@@ -583,7 +630,7 @@ int pass2(char *path, int status, table tab, word *head){
 						}
 						
 						/* add the label and position to the reference list */
-						if(addnextlbl(exthead, args[1], strIC) == NULL){
+						if(addnextlbl(exthead, secArg, strIC) == NULL){
 							freeall(line, args, strIC, NULL);
 							freeLblList(enthead);
 							freeLblList(exthead);
@@ -600,28 +647,30 @@ int pass2(char *path, int status, table tab, word *head){
 					}
 					
 					/* add the operand to the list */
-					if((tmp = addnext(wordnode, cop)) == NULL){ /* check if added to list */
-						freeall(line, args, NULL);
-						freeLblList(enthead);
-						freeLblList(exthead);
-						freeMemList(head);
-						freetab(tab);
-						fclose(src);
-						report(ERR_MEM, ln);
-						return ERR_MEM;
+					if (wordnode != NULL){ /* make sure it is on the operand word (it could be NULL if there was a previous error) */
+						if((tmp = addnext(wordnode, cop)) == NULL){ /* check if added to list */
+							freeall(line, args, NULL);
+							freeLblList(enthead);
+							freeLblList(exthead);
+							freeMemList(head);
+							freetab(tab);
+							fclose(src);
+							report(ERR_MEM, ln);
+							return ERR_MEM;
+						}
+						wordnode = tmp; /* change to the new node */
+						ic++; /* count the added operand word */
 					}
-					wordnode = tmp; /* change to the new node */
-					ic++; /* count the added operand word */
 					
 					break;
 					
 				case AC2: /* the operand is struct field (should add the address of the label and the number of the field to the list) */
-					ptr = strchr(args[1], DOT); /* return pointer the the first encounter with dot */
+					ptr = strchr(secArg, DOT); /* return pointer the the first encounter with dot */
 					*ptr = EOS; /* replace with end of string sign */
 					ptr++; /* move forward by one (to the field's number) */
 					
 					/* get the kinf of label (if exists) */
-					if((kind = getkind(tab, args[1])) == NOTFOUND){
+					if((kind = getkind(tab, secArg)) == NOTFOUND){
 						freeall(line, args, NULL);
 						report(status = ERR_ARGS_LBL, ln);
 						continue; /* move to the next line */
@@ -634,7 +683,7 @@ int pass2(char *path, int status, table tab, word *head){
 						continue; /* move to the next line */
 					}
 					
-					cop = getcontent(tab, args[1]); /* get the labels address */
+					cop = getcontent(tab, secArg); /* get the labels address */
 					
 					/* check if the label is external */
 					if(kind == GEXT){
@@ -655,7 +704,7 @@ int pass2(char *path, int status, table tab, word *head){
 						}
 						
 						/* add the label and position to the reference list */
-						if (addnextlbl(exthead, args[1], strIC) == NULL){ /* check if added to the list */
+						if (addnextlbl(exthead, secArg, strIC) == NULL){ /* check if added to the list */
 							freeall(line, args, strIC, NULL);
 							freeLblList(enthead);
 							freeLblList(exthead);
@@ -672,19 +721,21 @@ int pass2(char *path, int status, table tab, word *head){
 					}
 					
 					/* added label to the list */
-					if ((tmp = addnext(wordnode, cop)) == NULL){ /* check if added to the list */
-						freeall(line, args, NULL);
-						freeLblList(enthead);
-						freeLblList(exthead);
-						freeMemList(head);
-						freetab(tab);
-						fclose(src);
-						report(ERR_MEM, ln);
-						return ERR_MEM;
+					if (wordnode != NULL){ /* make sure it is on the operand word (it could be NULL if there was a previous error) */
+						if ((tmp = addnext(wordnode, cop)) == NULL){ /* check if added to the list */
+							freeall(line, args, NULL);
+							freeLblList(enthead);
+							freeLblList(exthead);
+							freeMemList(head);
+							freetab(tab);
+							fclose(src);
+							report(ERR_MEM, ln);
+							return ERR_MEM;
+						}
+
+						wordnode = tmp; /* change to the next node */
+						ic++; /* count the added node */
 					}
-					
-					wordnode = tmp; /* change to the next node */
-					ic++; /* count the added node */
 					
 					/* convert to string the field's number */
 					if ((cop = itostr(atoi(ptr))) == NULL){
@@ -702,19 +753,21 @@ int pass2(char *path, int status, table tab, word *head){
 					opcA(cop); /* set teh ARE */
 					
 					/* add the field's number to the list */
-					if ((tmp = addnext(wordnode, cop)) == NULL){
-						freeall(line, args, cop, NULL);
-						freeLblList(enthead);
-						freeLblList(exthead);
-						freeMemList(head);
-						freetab(tab);
-						fclose(src);
-						report(ERR_MEM, ln);
-						return ERR_MEM;
+					if (wordnode != NULL){ /* make sure it is on the operand word (it could be NULL if there was a previous error) */
+						if ((tmp = addnext(wordnode, cop)) == NULL){
+							freeall(line, args, cop, NULL);
+							freeLblList(enthead);
+							freeLblList(exthead);
+							freeMemList(head);
+							freetab(tab);
+							fclose(src);
+							report(ERR_MEM, ln);
+							return ERR_MEM;
+						}
+
+						wordnode = tmp; /* move to the new node */
+						ic++; /* count the added node */
 					}
-					
-					wordnode = tmp; /* move to the new node */
-					ic++; /* count the added node */
 					
 					free(cop);
 					
@@ -722,7 +775,7 @@ int pass2(char *path, int status, table tab, word *head){
 					
 				case AC3:
 					cop = (string)malloc((WORDSIZE + 1) * sizeof(char)); /* allocate new memory for the operand */
-					reg = atoi(args[1]+1); /* get the register's number */
+					reg = atoi(secArg + 1); /* get the register's number */
 					
 					/* check the memory allocate */
 					if (cop == NULL){
@@ -747,19 +800,21 @@ int pass2(char *path, int status, table tab, word *head){
 					opcA(cop); /* set the ARE of the operand's word */
 					
 					/* add the word to the list */
-					if ((tmp = addnext(wordnode, cop)) == NULL){
-						freeall(line, args, cop, NULL);
-						freeLblList(enthead);
-						freeLblList(exthead);
-						freeMemList(head);
-						freetab(tab);
-						fclose(src);
-						report(ERR_MEM, ln);
-						return ERR_MEM;
+					if (wordnode != NULL){ /* make sure it is on the operand word (it could be NULL if there was a previous error) */
+						if ((tmp = addnext(wordnode, cop)) == NULL){
+							freeall(line, args, cop, NULL);
+							freeLblList(enthead);
+							freeLblList(exthead);
+							freeMemList(head);
+							freetab(tab);
+							fclose(src);
+							report(ERR_MEM, ln);
+							return ERR_MEM;
+						}
+
+						wordnode = tmp; /* change to the new node */
+						ic++; /* count the new node */
 					}
-					
-					wordnode = tmp; /* change to the new node */
-					ic++; /* count the new node */
 					
 					free(cop);
 					
@@ -768,7 +823,10 @@ int pass2(char *path, int status, table tab, word *head){
 			} /* end of switch for second operand */	
 		} /* end of else (the operands' addressings checks)*/
 		
-		wordnode = wordnode->next; /* move to the next instruction word */
+		/* move to the next instruction word */
+		if (wordnode != NULL){ /* make sure it is on the operand word (it could be NULL if there was a previous error) */
+			wordnode = wordnode->next;
+		}
 		
 		freeall(line, args, NULL);
 	} /* end of while (scan the source file) */
